@@ -17,25 +17,38 @@ class PlaybackScrubberTests: XCTestCase {
 		XCTAssertEqual(playbackScrubber.currentTime, 0)
     }
 
-	func testPlaybackScrubber_WhenSettingCurrentTimeToNegativeValue_CurrentTimeIsZero() {
+	func testPlaybackScrubber_WhenSettingCurrentTimeToNegativeValue_CurrentTimeIsClampedToZero() {
 		playbackScrubber.currentTime = -100
 		XCTAssertEqual(playbackScrubber.currentTime, 0)
 	}
 	
-	func testPlaybackScrubber_WhenSettingCurrentTimeToValueLargerThanDuration_CurrentTimeIsDuration() {
+	func testPlaybackScrubber_WhenSettingCurrentTimeToValueGreaterThanDuration_CurrentTimeIsClampedToDuration() {
 		playbackScrubber.duration = 100
 		playbackScrubber.currentTime = 200
 		XCTAssertEqual(playbackScrubber.currentTime, 100)
 	}
 	
-	func testPlaybackScrubber_WhenSettingDurationToValueLessThanCurrentTime_CurrentTimeIsDuration() {
+	func testPlaybackScrubber_WhenSettingCurrentTimeToValueLessThanDuration_CurrentTimeIsNewValue() {
+		playbackScrubber.duration = 100
+		playbackScrubber.currentTime = 99
+		XCTAssertEqual(playbackScrubber.currentTime, 99)
+	}
+	
+	func testPlaybackScrubber_WhenSettingDurationToValueLessThanCurrentTime_CurrentTimeIsClampedToDuration() {
 		playbackScrubber.duration = 400
 		playbackScrubber.currentTime = 200
 		playbackScrubber.duration = 100
 		XCTAssertEqual(playbackScrubber.currentTime, 100)
 	}
 	
-	func testPlaybackScrubber_SettingCurrentTimeWhileScrubbing_DoesNotChangeCurrentTIme() {
+	func testPlaybackScrubber_WhenSettingDurationToValueMoreThanCurrentTime_CurrentTimeIsNotClamped() {
+		playbackScrubber.duration = 400
+		playbackScrubber.currentTime = 200
+		playbackScrubber.duration = 201
+		XCTAssertEqual(playbackScrubber.currentTime, 200)
+	}
+	
+	func testPlaybackScrubber_SettingCurrentTimeWhileScrubbing_DoesNotChangeCurrentTime() {
 		playbackScrubber.frame = .init(x: 0, y: 0, width: 400, height: 40)
 		playbackScrubber.layoutSubviews()
 		
@@ -45,6 +58,19 @@ class PlaybackScrubberTests: XCTestCase {
 		playbackScrubber.currentTime = 1
 		
 		XCTAssertEqual(playbackScrubber.currentTime, 0)
+	}
+	
+	func testPlaybackScrubber_SettingCurrentTimeAfterScrubbing_ChangesCurrentTime() {
+		playbackScrubber.frame = .init(x: 0, y: 0, width: 400, height: 40)
+		playbackScrubber.layoutSubviews()
+		
+		let touch = MockTouch(location: CGPoint(x: 10, y: 10))
+		playbackScrubber.touchesBegan(Set([touch]), with: nil)
+		playbackScrubber.touchesEnded(Set([touch]), with: nil)
+		
+		playbackScrubber.currentTime = 1
+		
+		XCTAssertEqual(playbackScrubber.currentTime, 1)
 	}
 	
 	// MARK: - Delegate Tests

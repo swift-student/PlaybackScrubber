@@ -27,8 +27,7 @@ public class PlaybackScrubber: UIControl {
 	/// The default value of this property is 1.0
 	public var duration: TimeInterval = 1.0 {
 		didSet {
-			// Clamp playhead position within new duration
-			playheadPosition = playheadPosition
+			clampPlayheadPosition()
 			setNeedsLayout()
 		}
 	}
@@ -135,6 +134,12 @@ public class PlaybackScrubber: UIControl {
 		
 		addSubview(playhead)
 		playhead.translatesAutoresizingMaskIntoConstraints = false
+	}
+	
+	/// Clamps the playhead position within the range of `0...duration`.
+	private func clampPlayheadPosition() {
+		// Position is clamped in the setter for `playheadPosition`
+		playheadPosition = _clampedPlayheadPosition
 	}
 	
 	public override func layoutSubviews() {
