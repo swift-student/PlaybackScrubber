@@ -10,24 +10,28 @@ import XCTest
 
 class PlaybackScrubberTests: XCTestCase {
 
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+	let playbackScrubber = PlaybackScrubber()
+	
+    func testPlaybackScrubber_WhenInitialized_HasExpectedDefaults() {
+		XCTAssertEqual(playbackScrubber.duration, 1)
+		XCTAssertEqual(playbackScrubber.currentTime, 0)
     }
 
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-    }
-
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
-        }
-    }
-
+	func testPlaybackScrubber_WhenSettingCurrentTimeToNegativeValue_CurrentTimeIsZero() {
+		playbackScrubber.currentTime = -100
+		XCTAssertEqual(playbackScrubber.currentTime, 0)
+	}
+	
+	func testPlaybackScrubber_WhenSettingCurrentTimeToValueLargerThanDuration_CurrentTimeIsDuration() {
+		playbackScrubber.duration = 100
+		playbackScrubber.currentTime = 200
+		XCTAssertEqual(playbackScrubber.currentTime, 100)
+	}
+	
+	func testPlaybackScrubber_WhenSettingDurationToValueLessThanCurrentTime_CurrentTimeIsDuration() {
+		playbackScrubber.duration = 400
+		playbackScrubber.currentTime = 200
+		playbackScrubber.duration = 100
+		XCTAssertEqual(playbackScrubber.currentTime, 100)
+	}
 }
