@@ -137,9 +137,14 @@ public class PlaybackScrubber: UIControl {
 	/// Used to track the user's interaction with the control.
 	private var interactionState: InteractionState = .none
 	
+	
 	/// Provides haptic feedback to the user as they drag the playhead.
 	private var feedbackGenerator : UIImpactFeedbackGenerator?
-	private static let markerImpactIntensity = 0.6
+	
+	/// Closure to create a feedback generator, allows subbing in a subclass for unit testing purposes.
+	var createFeedbackGenerator: () -> UIImpactFeedbackGenerator = { UIImpactFeedbackGenerator() }
+	
+	static let markerImpactIntensity = 0.6
 	
 	// MARK: - Init
 	
@@ -211,7 +216,7 @@ public class PlaybackScrubber: UIControl {
 		}
 		
 		if isHapticFeedbackEnabled {
-			feedbackGenerator = UIImpactFeedbackGenerator()
+			feedbackGenerator = createFeedbackGenerator()
 			feedbackGenerator?.prepare()
 		}
 	}

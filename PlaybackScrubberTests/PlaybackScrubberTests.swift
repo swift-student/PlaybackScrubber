@@ -188,6 +188,48 @@ class PlaybackScrubberTests: XCTestCase {
 		XCTAssertTrue(delegate.didScrubToTimes.isEmpty)
 		XCTAssertTrue(delegate.didEndScrubbingTimes.isEmpty)
 	}
+	
+	// MARK: - Haptic Tests
+	
+	func testPlaybackScrubber_WhenScrubbingAcrossSectionMarkerWithHapticsEnabled_GeneratesHapticImpact() {
+		let feedbackGenerator = MockFeedbackGenerator()
+		playbackScrubber.createFeedbackGenerator = { feedbackGenerator }
+		playbackScrubber.duration = 100
+		playbackScrubber.sectionMarkers = [PlaybackScrubber.SectionMarker(time: 50)]
+		playbackScrubber.frame = .init(x: 0, y: 0, width: 400, height: 40)
+		playbackScrubber.layoutSubviews()
+		
+		let touch = MockTouch(location: CGPoint(x: 10, y: 10))
+		playbackScrubber.touchesBegan(Set([touch]), with: nil)
+		touch.location.x += 200
+		playbackScrubber.touchesMoved(Set([touch]), with: nil)
+		
+		XCTAssertEqual(feedbackGenerator.impacts, [PlaybackScrubber.markerImpactIntensity])
+		
+		touch.location.x -= 200
+		playbackScrubber.touchesMoved(Set([touch]), with: nil)
+		
+		XCTAssertEqual(feedbackGenerator.impacts, [PlaybackScrubber.markerImpactIntensity, PlaybackScrubber.markerImpactIntensity])
+	}
+	
+	func testPlaybackScrubber_WhenScrubbingAcrossSectionMarkerWithHapticsDisabled_DoesNotGenerateHapticImpact() {
+		let feedbackGenerator = MockFeedbackGenerator()
+		playbackScrubber.isHapticFeedbackEnabled = false
+		playbackScrubber.createFeedbackGenerator = { feedbackGenerator }
+		playbackScrubber.duration = 100
+		playbackScrubber.sectionMarkers = [PlaybackScrubber.SectionMarker(time: 50)]
+		playbackScrubber.frame = .init(x: 0, y: 0, width: 400, height: 40)
+		playbackScrubber.layoutSubviews()
+		
+		let touch = MockTouch(location: CGPoint(x: 10, y: 10))
+		playbackScrubber.touchesBegan(Set([touch]), with: nil)
+		touch.location.x += 200
+		playbackScrubber.touchesMoved(Set([touch]), with: nil)
+		touch.location.x -= 200
+		playbackScrubber.touchesMoved(Set([touch]), with: nil)
+		
+		XCTAssertTrue(feedbackGenerator.impacts.isEmpty)
+	}
 }
 
 class MockPlaybackScrubberDelegate: PlaybackScrubberDelegate {
@@ -218,5 +260,23 @@ class MockTouch: UITouch {
 	convenience init(location: CGPoint) {
 		self.init()
 		self.location = location
+	}
+}
+
+class MockFeedbackGenerator: UIImpactFeedbackGenerator {
+	var impacts: [CGFloat] = []
+	
+	/// By setting this property in the mock generator from `prepare()`, we ensure that we properly
+	/// prepared the feedback generator before calling `impactOccurred(intensity:)` ensuring minimum latency.
+	var isPrepared = false
+	
+	override func prepare() {
+		isPrepared = true
+	}
+	
+	override func impactOccurred(intensity: CGFloat) {
+		guard isPrepared else { return } // Ensure we called 'prepare()`
+		impacts.append(intensity)
+		isPrepared = false
 	}
 }
