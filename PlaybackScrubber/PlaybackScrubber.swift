@@ -60,6 +60,11 @@ class PlaybackScrubber: UIControl {
 	
 	// MARK: - Private Properties
 	
+	private enum Layout {
+		static let defaultTrackHeight: CGFloat = 6
+		static let defaultPlayheadSize = CGSize(width: 14, height: 14)
+	}
+	
 	/// The location of the playhead in seconds.
 	private var playheadPosition: TimeInterval {
 		set { _clampedPlayheadPosition = min(duration, max(0, newValue)) }
@@ -79,13 +84,20 @@ class PlaybackScrubber: UIControl {
 		return playheadPosition / duration
 	}
 	
-	private enum Layout {
-		static let defaultTrackHeight: CGFloat = 6
-		static let defaultPlayheadSize = CGSize(width: 14, height: 14)
-	}
-	
 	private let track = Track()
 	private let playhead = Playhead()
+	
+	enum InteractionState {
+		case none
+		case scrubbing(initialPlayheadPosition: TimeInterval)
+	}
+
+	/// Used to track the user's interaction with the control.
+	private var interactionState: InteractionState = .none
+	
+	/// Provides haptic feedback to the user as they drag the playhead.
+	private var feedbackGenerator : UIImpactFeedbackGenerator?
+	private static let markerImpactIntensity = 0.6
 	
 	// MARK: - Init
 	
@@ -138,14 +150,7 @@ class PlaybackScrubber: UIControl {
 	}
 	
 	// MARK: - Touch Handling
-	
-	enum InteractionState {
-		case none
-		case scrubbing(initialPlayheadPosition: TimeInterval)
-	}
-	
-	private var interactionState: InteractionState = .none
-	
+
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
 		guard let touch = touches.first else { return }
 		let touchLocation = touch.location(in: self)
@@ -154,6 +159,8 @@ class PlaybackScrubber: UIControl {
 		guard playhead.frame.insetBy(dx: -20, dy: -20).contains(touchLocation) else { return }
 
 		interactionState = .scrubbing(initialPlayheadPosition: playheadPosition)
+		feedbackGenerator = UIImpactFeedbackGenerator()
+		feedbackGenerator?.prepare()
 	}
 	
 	override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -165,13 +172,27 @@ class PlaybackScrubber: UIControl {
 			// Nothing to do, the user hasn't initiated a scrub.
 			return
 		case .scrubbing:
-			playheadPosition = (touchLocation.x - track.insetDistance) / track.usableWidth * duration
+			let newPlayheadPosition = (touchLocation.x - track.insetDistance) / track.usableWidth * duration
+			
+			if sectionMarkerExistsBetween(playheadPosition, newPlayheadPosition) {
+				feedbackGenerator?.impactOccurred(intensity: Self.markerImpactIntensity)
+				feedbackGenerator?.prepare()
+			}
+			
+			playheadPosition = newPlayheadPosition
 		}
-		
+	}
+	
+	private func sectionMarkerExistsBetween(_ timeA: TimeInterval, _ timeB: TimeInterval) -> Bool {
+		return sectionMarkers.contains(where: { marker in
+			timeA < marker.time && timeB >= marker.time ||
+			timeA > marker.time && timeB <= marker.time
+		})
 	}
 	
 	override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
 		interactionState = .none
+		feedbackGenerator = nil
 	}
 	
 	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -179,8 +200,8 @@ class PlaybackScrubber: UIControl {
 			playheadPosition = initialPlayheadPosition
 		}
 		interactionState = .none
+		feedbackGenerator = nil
 	}
-	
 }
 
 // MARK: - Track
