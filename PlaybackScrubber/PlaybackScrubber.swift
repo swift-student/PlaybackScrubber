@@ -154,9 +154,7 @@ class PlaybackScrubber: UIControl {
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
 		guard let touch = touches.first else { return }
 		let touchLocation = touch.location(in: self)
-		// See if the touch is within the playhead with some margin
-		// TODO: Calculate this outset
-		guard playhead.frame.insetBy(dx: -20, dy: -20).contains(touchLocation) else { return }
+		guard playhead.frame.touchTarget.contains(touchLocation) else { return }
 
 		interactionState = .scrubbing(initialPlayheadPosition: playheadPosition)
 		feedbackGenerator = UIImpactFeedbackGenerator()
@@ -197,6 +195,7 @@ class PlaybackScrubber: UIControl {
 	
 	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
 		if case .scrubbing(let initialPlayheadPosition) = interactionState {
+			// Reset playhead position in the case that touches were cancelled.
 			playheadPosition = initialPlayheadPosition
 		}
 		interactionState = .none
@@ -350,5 +349,15 @@ extension PlaybackScrubber {
 			shapeLayer.shadowColor = UIColor.black.cgColor
 			shapeLayer.shadowOpacity = 0.3
 		}
+	}
+}
+
+extension CGRect {
+	static let minTouchTargetSize = CGSize(width: 44, height: 44) // per Apple's HIG
+	
+	/// Returns the smallest rect encompassing this rect that is of the minimum touch target size or larger.
+	var touchTarget: CGRect {
+		return self.insetBy(dx: width >= Self.minTouchTargetSize.width ? 0 : -(Self.minTouchTargetSize.width - width) / 2,
+							dy: height >= Self.minTouchTargetSize.height ? 0 : -(Self.minTouchTargetSize.height - height) / 2)
 	}
 }
