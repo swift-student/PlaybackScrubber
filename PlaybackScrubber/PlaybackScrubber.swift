@@ -50,6 +50,10 @@ public class PlaybackScrubber: UIControl {
 		get { playheadPosition }
 	}
 	
+	public var isHapticFeedbackEnabled: Bool = true
+	
+	/// An array of markers that denote sections within the media. These markers will be indicated visually,
+	/// and haptic feedback (if enabled) will let the user know when they have changed sections while scrubbing.
 	public var sectionMarkers: [SectionMarker] = [] {
 		didSet {
 			updateTrackTickMarks()
@@ -57,12 +61,45 @@ public class PlaybackScrubber: UIControl {
 		}
 	}
 	
-	public var trackHeight: CGFloat = Layout.defaultTrackHeight
-	public var playheadSize: CGSize = Layout.defaultPlayheadSize {
+	/// The height of the track that the playhead moves along.
+	/// The default value of this property is 6 pt.
+	public var trackHeight: CGFloat = 6
+	
+	/// True if the corners of the track and the elapsed time fill should be rounded, false otherwise.
+	public var shouldRoundTrackCorners: Bool {
+		set { track.shouldRoundCorners = newValue }
+		get { track.shouldRoundCorners }
+	}
+	
+	/// The color of the portion of the track that represents the elapsed time.
+	/// The default value of this property is `.systemGreen`.
+	public var elapsedTrackTintColor: UIColor {
+		set { track.elapsedTintColor = newValue }
+		get { track.elapsedTintColor }
+	}
+	
+	/// The color of the portion of the track that represents the remaining time.
+	/// The default value of this property is a light gray with 50% opacity.
+	public var remainingTrackTintColor: UIColor {
+		set { track.remainingTintColor = newValue }
+		get { track.remainingTintColor }
+	}
+	
+	
+	/// The size of the playhead (a.k.a. thumb, knob, handle) that indicates the `currentTime` of the scrubber.
+	/// The default value of this property is 14x14 pt.
+	public var playheadSize: CGSize = CGSize(width: 14, height: 14) {
 		didSet {
 			updateTrackInset()
-			track.setNeedsDisplay()
+			setNeedsLayout()
 		}
+	}
+	
+	/// The fill color of the playhead.
+	/// The default value of this property is a very light gray.
+	public var playheadColor: UIColor {
+		set { playhead.color = newValue }
+		get { playhead.color }
 	}
 	
 	/// When true, the user can initiate a scrub by dragging on the track at any location, not just where the playhead is.
@@ -71,11 +108,6 @@ public class PlaybackScrubber: UIControl {
 	public var allowScrubbingFromAnyTouchLocation = true
 	
 	// MARK: - Private Properties
-	
-	private enum Layout {
-		static let defaultTrackHeight: CGFloat = 6
-		static let defaultPlayheadSize = CGSize(width: 14, height: 14)
-	}
 	
 	/// The location of the playhead in seconds.
 	private var playheadPosition: TimeInterval {
@@ -184,8 +216,10 @@ public class PlaybackScrubber: UIControl {
 			interactionState = .mayScrub(initialTouchLocation: touchLocation)
 		}
 		
-		feedbackGenerator = UIImpactFeedbackGenerator()
-		feedbackGenerator?.prepare()
+		if isHapticFeedbackEnabled {
+			feedbackGenerator = UIImpactFeedbackGenerator()
+			feedbackGenerator?.prepare()
+		}
 	}
 	
 	public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
