@@ -14,11 +14,6 @@ public protocol PlaybackScrubberDelegate: AnyObject {
 }
 
 public class PlaybackScrubber: UIControl {
-	public struct SectionMarker {
-		var time: TimeInterval
-		var title: String?
-		var description: String?
-	}
 	// MARK: - Public Properties
 	
 	public weak var delegate: PlaybackScrubberDelegate?
@@ -84,7 +79,6 @@ public class PlaybackScrubber: UIControl {
 		set { track.remainingTintColor = newValue }
 		get { track.remainingTintColor }
 	}
-	
 	
 	/// The size of the playhead (a.k.a. thumb, knob, handle) that indicates the `currentTime` of the scrubber.
 	/// The default value of this property is 14x14 pt.
@@ -286,6 +280,16 @@ public class PlaybackScrubber: UIControl {
 		
 		interactionState = .none
 		feedbackGenerator = nil
+	}
+}
+
+// MARK: - Section Marker
+
+extension PlaybackScrubber {
+	public struct SectionMarker {
+		var time: TimeInterval
+		var title: String? // Currently unused
+		var description: String? // Currently unused
 	}
 }
 
