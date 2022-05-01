@@ -51,7 +51,12 @@ class PlaybackScrubber: UIControl {
 	}
 	
 	public var trackHeight: CGFloat = Layout.defaultTrackHeight
-	public var playheadSize: CGSize = Layout.defaultPlayheadSize
+	public var playheadSize: CGSize = Layout.defaultPlayheadSize {
+		didSet {
+			updateTrackInset()
+			track.setNeedsDisplay()
+		}
+	}
 	
 	// MARK: - Private Properties
 	
@@ -97,6 +102,7 @@ class PlaybackScrubber: UIControl {
 	func commonInit() {
 		addSubview(track)
 		track.translatesAutoresizingMaskIntoConstraints = false
+		updateTrackInset()
 		
 		addSubview(playhead)
 		playhead.translatesAutoresizingMaskIntoConstraints = false
@@ -127,6 +133,10 @@ class PlaybackScrubber: UIControl {
 		}
 	}
 	
+	private func updateTrackInset() {
+		track.insetDistance = playheadSize.width / 2
+	}
+	
 	// MARK: - Touch Handling
 	
 	enum InteractionState {
@@ -155,7 +165,7 @@ class PlaybackScrubber: UIControl {
 			// Nothing to do, the user hasn't initiated a scrub.
 			return
 		case .scrubbing:
-			playheadPosition = touchLocation.x / bounds.width * duration
+			playheadPosition = (touchLocation.x - track.insetDistance) / track.usableWidth * duration
 		}
 		
 	}
@@ -177,6 +187,11 @@ class PlaybackScrubber: UIControl {
 
 extension PlaybackScrubber {
 	class Track: UIView {
+		
+		/// The portion of the track at either end that is not usable due to the width of the playhead.
+		var insetDistance: CGFloat = 0
+		
+		var usableWidth: CGFloat { bounds.width - insetDistance * 2 }
 		
 		/// The percentage of progress to indicate visually via the `elapsedTintColor`.
 		/// Must be in the range of 0...1
@@ -208,6 +223,8 @@ extension PlaybackScrubber {
 			var location: Double
 			var style: Style
 		}
+		
+		// MARK: - Private Properties
 
 		private static var tickMarkWidth: CGFloat = 2
 		
@@ -217,6 +234,8 @@ extension PlaybackScrubber {
 		private var elapsedLayer = CAShapeLayer()
 		
 		private var cornerRadius: CGFloat { shouldRoundCorners ? bounds.height / 2 : 0 }
+		
+		// MARK: - Init
 		
 		override init(frame: CGRect) {
 			super.init(frame: frame)
@@ -241,7 +260,7 @@ extension PlaybackScrubber {
 			setPathForLayer(baseLayer, withRect: bounds)
 			let elapsedRect = CGRect(x: 0,
 									 y: 0,
-									 width: frame.width * CGFloat(progress),
+									 width: insetDistance + usableWidth * CGFloat(progress),
 									 height: frame.height)
 			setPathForLayer(elapsedLayer, withRect: elapsedRect)
 		}
@@ -253,7 +272,7 @@ extension PlaybackScrubber {
 									 transform: nil)
 			
 			for tickMark in tickMarks where tickMark.style == .occlusion {
-				let tickMarkRect = CGRect(x: (bounds.width - Self.tickMarkWidth) * tickMark.location,
+				let tickMarkRect = CGRect(x: insetDistance + (usableWidth - Self.tickMarkWidth) * tickMark.location,
 										  y: 0,
 										  width: Self.tickMarkWidth,
 										  height: bounds.height)
