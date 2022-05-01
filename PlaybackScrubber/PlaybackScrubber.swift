@@ -7,13 +7,21 @@
 
 import UIKit
 
-class PlaybackScrubber: UIControl {
-	struct SectionMarker {
+public protocol PlaybackScrubberDelegate: AnyObject {
+	func scrubber(_ playbackScrubber: PlaybackScrubber, didBeginScrubbingAtTime time: TimeInterval)
+	func scrubber(_ playbackScrubber: PlaybackScrubber, didScrubToTime time: TimeInterval)
+	func scrubber(_ playbackScrubber: PlaybackScrubber, didEndScrubbingAtTime time: TimeInterval)
+}
+
+public class PlaybackScrubber: UIControl {
+	public struct SectionMarker {
 		var time: TimeInterval
 		var title: String?
 		var description: String?
 	}
 	// MARK: - Public Properties
+	
+	public weak var delegate: PlaybackScrubberDelegate?
 	
 	/// The overall duration of the media this scrubber represents in seconds.
 	/// The default value of this property is 1.0
@@ -34,7 +42,7 @@ class PlaybackScrubber: UIControl {
 			case .scrubbing:
 				// We don't want to allow setting the playhead position while the user is actively scrubbing.
 				return
-			case .none:
+			case .mayScrub, .none:
 				break
 			}
 			playheadPosition = newValue
@@ -57,6 +65,11 @@ class PlaybackScrubber: UIControl {
 			track.setNeedsDisplay()
 		}
 	}
+	
+	/// When true, the user can initiate a scrub by dragging on the track at any location, not just where the playhead is.
+	/// The touch must move a certain amount before the playhead will snap to the touch's location.
+	/// When false, the user must touch within the playhead's frame (plus some margin) in order to initiate a scrub.
+	public var allowScrubbingFromAnyTouchLocation = true
 	
 	// MARK: - Private Properties
 	
@@ -89,7 +102,11 @@ class PlaybackScrubber: UIControl {
 	
 	enum InteractionState {
 		case none
+		case mayScrub(initialTouchLocation: CGPoint)
 		case scrubbing(initialPlayheadPosition: TimeInterval)
+		
+		/// The minimum amount a touch must move to initiate a scrub when dragging at a point not within the playhead's touch target.
+		static let minXDistanceToInitiateScrub: CGFloat = 10
 	}
 
 	/// Used to track the user's interaction with the control.
@@ -120,7 +137,7 @@ class PlaybackScrubber: UIControl {
 		playhead.translatesAutoresizingMaskIntoConstraints = false
 	}
 	
-	override func layoutSubviews() {
+	public override func layoutSubviews() {
 		// Center the track vertically
 		track.frame = CGRect(x: 0,
 							 y: (frame.height - trackHeight) / 2,
@@ -151,26 +168,37 @@ class PlaybackScrubber: UIControl {
 	
 	// MARK: - Touch Handling
 
-	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+	public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
 		guard let touch = touches.first else { return }
 		let touchLocation = touch.location(in: self)
-		guard playhead.frame.touchTarget.contains(touchLocation) else { return }
-
-		interactionState = .scrubbing(initialPlayheadPosition: playheadPosition)
+		
+		if playhead.frame.touchTarget.contains(touchLocation) {
+			interactionState = .scrubbing(initialPlayheadPosition: playheadPosition)
+			delegate?.scrubber(self, didBeginScrubbingAtTime: playheadPosition)
+		} else if allowScrubbingFromAnyTouchLocation {
+			interactionState = .mayScrub(initialTouchLocation: touchLocation)
+		}
+		
 		feedbackGenerator = UIImpactFeedbackGenerator()
 		feedbackGenerator?.prepare()
 	}
 	
-	override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+	public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
 		guard let touch = touches.first else { return }
 		let touchLocation = touch.location(in: self)
 		
 		switch interactionState {
 		case .none:
 			// Nothing to do, the user hasn't initiated a scrub.
-			return
+			break
+		case .mayScrub(let initialTouchLocation):
+			if abs(touchLocation.x - initialTouchLocation.x) >= InteractionState.minXDistanceToInitiateScrub {
+				delegate?.scrubber(self, didBeginScrubbingAtTime: playheadPosition)
+				interactionState = .scrubbing(initialPlayheadPosition: playheadPosition)
+				fallthrough
+			}
 		case .scrubbing:
-			let newPlayheadPosition = (touchLocation.x - track.insetDistance) / track.usableWidth * duration
+			let newPlayheadPosition = playheadPosition(forTouchLocation: touchLocation)
 			
 			if sectionMarkerExistsBetween(playheadPosition, newPlayheadPosition) {
 				feedbackGenerator?.impactOccurred(intensity: Self.markerImpactIntensity)
@@ -178,6 +206,7 @@ class PlaybackScrubber: UIControl {
 			}
 			
 			playheadPosition = newPlayheadPosition
+			delegate?.scrubber(self, didScrubToTime: playheadPosition)
 		}
 	}
 	
@@ -188,16 +217,34 @@ class PlaybackScrubber: UIControl {
 		})
 	}
 	
-	override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+	public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+		switch interactionState {
+		case .none, .mayScrub:
+			// Nothing to do, the user hasn't initiated a scrub.
+			break
+		case .scrubbing:
+			delegate?.scrubber(self, didEndScrubbingAtTime: playheadPosition)
+		}
+
 		interactionState = .none
 		feedbackGenerator = nil
 	}
 	
-	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-		if case .scrubbing(let initialPlayheadPosition) = interactionState {
+	private func playheadPosition(forTouchLocation touchLocation: CGPoint) -> TimeInterval {
+		(touchLocation.x - track.insetDistance) / track.usableWidth * duration
+	}
+	
+	public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+		switch interactionState {
+		case .none, .mayScrub:
+			// Nothing to do, the user hasn't initiated a scrub.
+			break
+		case .scrubbing(let initialPlayheadPosition):
 			// Reset playhead position in the case that touches were cancelled.
 			playheadPosition = initialPlayheadPosition
+			delegate?.scrubber(self, didEndScrubbingAtTime: playheadPosition)
 		}
+		
 		interactionState = .none
 		feedbackGenerator = nil
 	}
@@ -208,37 +255,40 @@ class PlaybackScrubber: UIControl {
 extension PlaybackScrubber {
 	class Track: UIView {
 		
-		/// The portion of the track at either end that is not usable due to the width of the playhead.
+		/// The width of the portion of the track at either end that is not usable due to the width of the playhead.
 		var insetDistance: CGFloat = 0
 		
-		var usableWidth: CGFloat { bounds.width - insetDistance * 2 }
+		/// The width portion of the track that is usable, calculated based on the width of the track and the `insetDistance`.
+		var usableWidth: CGFloat { frame.width - insetDistance * 2 }
 		
 		/// The percentage of progress to indicate visually via the `elapsedTintColor`.
 		/// Must be in the range of 0...1
 		var progress: Double = 0.5
 		
-		/// The color of the portion of the track that represents the elapsed time.
+		/// The color of the portion of the track that represents the elapsed time. Defaults to `.systemGreen`.
 		var elapsedTintColor: UIColor = .systemGreen {
 			didSet {
 				elapsedLayer.fillColor = elapsedTintColor.cgColor
 			}
 		}
 		
-		/// The color of the portion of the track that represents the remaining time.
+		/// The color of the portion of the track that represents the remaining time. Defaults to a light gray with 50% opacity.
 		var remainingTintColor: UIColor = UIColor(white: 0.7, alpha: 0.5) {
 			didSet {
 				baseLayer.fillColor = remainingTintColor.cgColor
 			}
 		}
 		
+		/// An array of tick marks to be represented on the track visually.
 		var tickMarks: [TickMark] = []
 		
+		/// True if the corners of the track and the elapsed time fill should be rounded, false otherwise.
 		var shouldRoundCorners = true
 		
 		struct TickMark {
 			enum Style: Equatable {
-				case color(UIColor) // TODO: Handle drawing colored tick marks
 				case occlusion
+//				case color(UIColor) // TODO: Handle drawing colored tick marks
 			}
 			var location: Double
 			var style: Style
@@ -315,6 +365,7 @@ extension PlaybackScrubber {
 		
 		// MARK: - Public Properties
 		
+		/// The fill color of the playhead. Defaults to a very light gray.
 		var color: UIColor = UIColor(white: 0.98, alpha: 1.0) {
 			didSet {
 				shapeLayer.fillColor = color.cgColor
@@ -349,15 +400,5 @@ extension PlaybackScrubber {
 			shapeLayer.shadowColor = UIColor.black.cgColor
 			shapeLayer.shadowOpacity = 0.3
 		}
-	}
-}
-
-extension CGRect {
-	static let minTouchTargetSize = CGSize(width: 44, height: 44) // per Apple's HIG
-	
-	/// Returns the smallest rect encompassing this rect that is of the minimum touch target size or larger.
-	var touchTarget: CGRect {
-		return self.insetBy(dx: width >= Self.minTouchTargetSize.width ? 0 : -(Self.minTouchTargetSize.width - width) / 2,
-							dy: height >= Self.minTouchTargetSize.height ? 0 : -(Self.minTouchTargetSize.height - height) / 2)
 	}
 }
