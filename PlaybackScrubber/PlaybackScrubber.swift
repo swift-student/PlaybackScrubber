@@ -217,6 +217,10 @@ public class PlaybackScrubber: UIControl {
 		}
 	}
 	
+	private func indexOfSectionMarkerImmediatelyPreceding(_ time: TimeInterval) -> Int? {
+		return sectionMarkers.lastIndex(where: { $0.time < time })
+	}
+	
 	private func tickMark(forSectionMarker sectionMarker: SectionMarker) -> Track.TickMark {
 		Track.TickMark(location: sectionMarker.time / duration, style: .occlusion)
 	}
@@ -235,6 +239,10 @@ public class PlaybackScrubber: UIControl {
 		case .none, .mayScrub:
 			track.clearHighlight()
 		case .scrubbing:
+			defer {
+				feedbackGenerator?.impactOccurred(intensity: Self.markerImpactIntensity)
+				feedbackGenerator?.prepare()
+			}
 			guard let index = sectionMarkerIndex else {
 				// The playhead position is before any section markers.
 				track.highlightSectionBetween(leftTickMark: nil,
@@ -290,26 +298,19 @@ public class PlaybackScrubber: UIControl {
 			if abs(touchLocation.x - initialTouchLocation.x) >= InteractionState.minXDistanceToInitiateScrub {
 				delegate?.scrubber(self, didBeginScrubbingAtTime: playheadPosition)
 				interactionState = .scrubbing(initialPlayheadPosition: playheadPosition)
-				fallthrough
+				playheadPosition = playheadPosition(forTouchLocation: touchLocation)
+				delegate?.scrubber(self, didScrubToTime: playheadPosition)
+				updateTrackHighlight()
 			}
 		case .scrubbing:
-			let newPlayheadPosition = playheadPosition(forTouchLocation: touchLocation)
 			let preScrubSectionMarkerIndex = sectionMarkerIndex
-			playheadPosition = newPlayheadPosition
+			playheadPosition = playheadPosition(forTouchLocation: touchLocation)
+			delegate?.scrubber(self, didScrubToTime: playheadPosition)
 			
 			if preScrubSectionMarkerIndex != sectionMarkerIndex {
-				feedbackGenerator?.impactOccurred(intensity: Self.markerImpactIntensity)
-				feedbackGenerator?.prepare()
+				updateTrackHighlight()
 			}
-			
-			delegate?.scrubber(self, didScrubToTime: playheadPosition)
 		}
-		
-		updateTrackHighlight()
-	}
-	
-	private func indexOfSectionMarkerImmediatelyPreceding(_ time: TimeInterval) -> Int? {
-		return sectionMarkers.lastIndex(where: { $0.time < time })
 	}
 	
 	public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -326,10 +327,6 @@ public class PlaybackScrubber: UIControl {
 		updateTrackHighlight()
 	}
 	
-	private func playheadPosition(forTouchLocation touchLocation: CGPoint) -> TimeInterval {
-		(touchLocation.x - track.insetDistance) / track.usableWidth * duration
-	}
-	
 	public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
 		switch interactionState {
 		case .none, .mayScrub:
@@ -344,6 +341,10 @@ public class PlaybackScrubber: UIControl {
 		interactionState = .none
 		feedbackGenerator = nil
 		updateTrackHighlight()
+	}
+	
+	private func playheadPosition(forTouchLocation touchLocation: CGPoint) -> TimeInterval {
+		(touchLocation.x - track.insetDistance) / track.usableWidth * duration
 	}
 }
 

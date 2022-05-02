@@ -201,15 +201,45 @@ class PlaybackScrubberTests: XCTestCase {
 		
 		let touch = MockTouch(location: CGPoint(x: 10, y: 10))
 		playbackScrubber.touchesBegan(Set([touch]), with: nil)
+		
+		// Should get haptic feedback when initiating scrub
+		XCTAssertEqual(feedbackGenerator.impacts, Array(repeating: PlaybackScrubber.markerImpactIntensity, count: 1))
+		
 		touch.location.x += 200
 		playbackScrubber.touchesMoved(Set([touch]), with: nil)
 		
-		XCTAssertEqual(feedbackGenerator.impacts, [PlaybackScrubber.markerImpactIntensity])
+		// and when changing sections
+		XCTAssertEqual(feedbackGenerator.impacts, Array(repeating: PlaybackScrubber.markerImpactIntensity, count: 2))
 		
 		touch.location.x -= 200
 		playbackScrubber.touchesMoved(Set([touch]), with: nil)
 		
-		XCTAssertEqual(feedbackGenerator.impacts, [PlaybackScrubber.markerImpactIntensity, PlaybackScrubber.markerImpactIntensity])
+		// in either direction
+		XCTAssertEqual(feedbackGenerator.impacts, Array(repeating: PlaybackScrubber.markerImpactIntensity, count: 3))
+		
+		playbackScrubber.touchesEnded(Set([touch]), with: nil)
+		
+		// but not when ending touches
+		XCTAssertEqual(feedbackGenerator.impacts, Array(repeating: PlaybackScrubber.markerImpactIntensity, count: 3))
+	}
+	
+	func testPlaybackScrubber_WhenInitiatingScrubByDraggingOnTrackWithHapticsEnabled_GeneratesHapticImpact() {
+		let feedbackGenerator = MockFeedbackGenerator()
+		playbackScrubber.createFeedbackGenerator = { feedbackGenerator }
+		playbackScrubber.duration = 100
+		playbackScrubber.sectionMarkers = [PlaybackScrubber.SectionMarker(time: 50)]
+		playbackScrubber.frame = .init(x: 0, y: 0, width: 400, height: 40)
+		playbackScrubber.layoutSubviews()
+		
+		let touch = MockTouch(location: CGPoint(x: 100, y: 10)) // Touch is NOT on playhead
+		playbackScrubber.touchesBegan(Set([touch]), with: nil)
+		
+		XCTAssertTrue(feedbackGenerator.impacts.isEmpty)
+		
+		touch.location.x += PlaybackScrubber.InteractionState.minXDistanceToInitiateScrub
+		playbackScrubber.touchesMoved(Set([touch]), with: nil)
+		
+		XCTAssertEqual(feedbackGenerator.impacts, Array(repeating: PlaybackScrubber.markerImpactIntensity, count: 1))
 	}
 	
 	func testPlaybackScrubber_WhenScrubbingAcrossSectionMarkerWithHapticsDisabled_DoesNotGenerateHapticImpact() {
@@ -218,6 +248,23 @@ class PlaybackScrubberTests: XCTestCase {
 		playbackScrubber.createFeedbackGenerator = { feedbackGenerator }
 		playbackScrubber.duration = 100
 		playbackScrubber.sectionMarkers = [PlaybackScrubber.SectionMarker(time: 50)]
+		playbackScrubber.frame = .init(x: 0, y: 0, width: 400, height: 40)
+		playbackScrubber.layoutSubviews()
+		
+		let touch = MockTouch(location: CGPoint(x: 10, y: 10))
+		playbackScrubber.touchesBegan(Set([touch]), with: nil)
+		touch.location.x += 200
+		playbackScrubber.touchesMoved(Set([touch]), with: nil)
+		touch.location.x -= 200
+		playbackScrubber.touchesMoved(Set([touch]), with: nil)
+		
+		XCTAssertTrue(feedbackGenerator.impacts.isEmpty)
+	}
+	
+	func testPlaybackScrubber_WhenScrubbingWithNoSectionMarkers_DoesNotGenerateHapticImpact() {
+		let feedbackGenerator = MockFeedbackGenerator()
+		playbackScrubber.createFeedbackGenerator = { feedbackGenerator }
+		playbackScrubber.duration = 100
 		playbackScrubber.frame = .init(x: 0, y: 0, width: 400, height: 40)
 		playbackScrubber.layoutSubviews()
 		
