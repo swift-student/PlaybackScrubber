@@ -19,6 +19,7 @@
 		0481D443281E11A000AF8B7C /* PlaybackScrubber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0481D442281E11A000AF8B7C /* PlaybackScrubber.swift */; };
 		0481D445281F018600AF8B7C /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0481D444281F018600AF8B7C /* Extensions.swift */; };
 		0481D447281F01BA00AF8B7C /* ExtensionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0481D446281F01BA00AF8B7C /* ExtensionTests.swift */; };
+		04C7D4462820069F00EC35A5 /* ShapeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04C7D4452820069F00EC35A5 /* ShapeView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,6 +56,7 @@
 		0481D442281E11A000AF8B7C /* PlaybackScrubber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackScrubber.swift; sourceTree = "<group>"; };
 		0481D444281F018600AF8B7C /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
 		0481D446281F01BA00AF8B7C /* ExtensionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionTests.swift; sourceTree = "<group>"; };
+		04C7D4452820069F00EC35A5 /* ShapeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShapeView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +111,7 @@
 				0462C779281CB166007D50FC /* SceneDelegate.swift */,
 				0462C77B281CB166007D50FC /* ViewController.swift */,
 				0481D442281E11A000AF8B7C /* PlaybackScrubber.swift */,
+				04C7D4452820069F00EC35A5 /* ShapeView.swift */,
 				0481D444281F018600AF8B7C /* Extensions.swift */,
 				0462C77D281CB166007D50FC /* Main.storyboard */,
 				0462C780281CB168007D50FC /* Assets.xcassets */,
@@ -267,6 +270,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				04C7D4462820069F00EC35A5 /* ShapeView.swift in Sources */,
 				0481D445281F018600AF8B7C /* Extensions.swift in Sources */,
 				0481D443281E11A000AF8B7C /* PlaybackScrubber.swift in Sources */,
 				0462C77C281CB166007D50FC /* ViewController.swift in Sources */,

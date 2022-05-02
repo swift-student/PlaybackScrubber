@@ -120,7 +120,7 @@ public class PlaybackScrubber: UIControl {
 	private var _clampedPlayheadPosition: TimeInterval = 0 {
 		didSet {
 			setNeedsLayout()
-			sectionMarkerIndex = indexOfSectionMarkerImmediatelyPreceeding(_clampedPlayheadPosition)
+			sectionMarkerIndex = indexOfSectionMarkerImmediatelyPreceding(_clampedPlayheadPosition)
 		}
 	}
 	
@@ -133,7 +133,7 @@ public class PlaybackScrubber: UIControl {
 	private let track = Track()
 	private let playhead = Playhead()
 	
-	/// The index of the section marker that immediately preceeds the current playhead location,
+	/// The index of the section marker that immediately precedes the current playhead location,
 	/// or nil if no marker has a time less than the playhead position or there are no section markers.
 	private var sectionMarkerIndex: Int?
 	
@@ -308,7 +308,7 @@ public class PlaybackScrubber: UIControl {
 		updateTrackHighlight()
 	}
 	
-	private func indexOfSectionMarkerImmediatelyPreceeding(_ time: TimeInterval) -> Int? {
+	private func indexOfSectionMarkerImmediatelyPreceding(_ time: TimeInterval) -> Int? {
 		return sectionMarkers.lastIndex(where: { $0.time < time })
 	}
 	
@@ -431,6 +431,8 @@ extension PlaybackScrubber {
 			fatalError("Use `init(frame:)`")
 		}
 		
+		/// Visually highlights a section of track between two tick marks or one edge of the track (represented by passing in nil) and a tick mark.
+		/// Passing in nil for for both tick marks will result in the highlight being cleared.
 		func highlightSectionBetween(leftTickMark: TickMark?, rightTickMark: TickMark?) {
 			guard leftTickMark != nil || rightTickMark != nil else {
 				clearHighlight()
@@ -461,6 +463,7 @@ extension PlaybackScrubber {
 			highlightView.shapeLayer.path = CGPath(rect: highlightRect, transform: nil)
 		}
 		
+		/// Clears any highlight previously set by `highlightSectionBetween(leftTickMark:rightTickMark:)`.
 		func clearHighlight() {
 			highlightView.shapeLayer.path = nil
 			highlightElapsedLayer.path = nil
@@ -501,7 +504,7 @@ extension PlaybackScrubber {
 			if let path = highlightView.shapeLayer.path {
 				let elapsedIntersection = elapsedRect
 					.insetBy(dx: 0, dy: -Self.highlightSize) // highlightView is taller
-					.offsetBy(dx: 0, dy: Self.highlightSize) // and it's origin is offset
+					.offsetBy(dx: 0, dy: Self.highlightSize) // and its origin is offset
 					.intersection(path.boundingBox)
 				highlightElapsedLayer.path = CGPath(rect: elapsedIntersection, transform: nil)
 			}
@@ -576,10 +579,4 @@ extension PlaybackScrubber {
 			shapeLayer.shadowOpacity = 0.3
 		}
 	}
-}
-
-/// A `UIView` that uses a `CAShapeLayer` as it's layer.
-class ShapeView: UIView {
-	override class var layerClass: AnyClass { CAShapeLayer.self }
-	var shapeLayer: CAShapeLayer { layer as! CAShapeLayer }
 }
