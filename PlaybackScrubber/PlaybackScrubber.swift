@@ -47,13 +47,12 @@ public class PlaybackScrubber: UIControl {
 	
 	public var isHapticFeedbackEnabled: Bool = true
 	
-	/// An array of markers that denote sections within the media. These markers will be indicated visually,
+	/// An ordered array of markers that denote sections within the media. These markers will be indicated visually,
 	/// and haptic feedback (if enabled) will let the user know when they have changed sections while scrubbing.
-	public var sectionMarkers: [SectionMarker] = [] {
-		didSet {
-			updateTrackTickMarks()
-			track.setNeedsLayout()
-		}
+	/// Markers will be sorted by time when setting this property.
+	public var sectionMarkers: [SectionMarker] {
+		set { _sortedSectionMarkers = newValue.sorted(by: { $0.time < $1.time }) }
+		get { _sortedSectionMarkers }
 	}
 	
 	/// The height of the track that the playhead moves along.
@@ -61,6 +60,7 @@ public class PlaybackScrubber: UIControl {
 	public var trackHeight: CGFloat = 6
 	
 	/// True if the corners of the track and the elapsed time fill should be rounded, false otherwise.
+	/// The default value of this property is true.
 	public var shouldRoundTrackCorners: Bool {
 		set { track.shouldRoundCorners = newValue }
 		get { track.shouldRoundCorners }
@@ -113,6 +113,7 @@ public class PlaybackScrubber: UIControl {
 	private var _clampedPlayheadPosition: TimeInterval = 0 {
 		didSet {
 			setNeedsLayout()
+			sectionMarkerIndex = indexOfSectionMarkerImmediatelyPreceeding(_clampedPlayheadPosition)
 		}
 	}
 	
@@ -125,6 +126,18 @@ public class PlaybackScrubber: UIControl {
 	private let track = Track()
 	private let playhead = Playhead()
 	
+	/// The index of the section marker that immediately preceeds the current playhead location,
+	/// or nil if no marker has a time less than the playhead position or there are no section markers.
+	private var sectionMarkerIndex: Int?
+	
+	/// Do not set this value directly, instead use `sectionMarkers` which sorts new values based on their time.
+	private var _sortedSectionMarkers: [SectionMarker] = [] {
+		didSet {
+			updateTrackTickMarks()
+			track.setNeedsLayout()
+		}
+	}
+	
 	enum InteractionState {
 		case none
 		case mayScrub(initialTouchLocation: CGPoint)
@@ -136,7 +149,6 @@ public class PlaybackScrubber: UIControl {
 
 	/// Used to track the user's interaction with the control.
 	private var interactionState: InteractionState = .none
-	
 	
 	/// Provides haptic feedback to the user as they drag the playhead.
 	private var feedbackGenerator : UIImpactFeedbackGenerator?
@@ -194,12 +206,48 @@ public class PlaybackScrubber: UIControl {
 	private func updateTrackTickMarks() {
 		guard duration != 0 else { return } // Avoid dividing by zero
 		track.tickMarks = sectionMarkers.map {
-			Track.TickMark(location: $0.time / duration, style: .occlusion)
+			tickMark(forSectionMarker: $0)
 		}
+	}
+	
+	private func tickMark(forSectionMarker sectionMarker: SectionMarker) -> Track.TickMark {
+		Track.TickMark(location: sectionMarker.time / duration, style: .occlusion)
 	}
 	
 	private func updateTrackInset() {
 		track.insetDistance = playheadSize.width / 2
+	}
+	
+	private func updateTrackHighlight() {
+		guard !sectionMarkers.isEmpty else {
+			track.clearHighlight()
+			return
+		}
+		
+		switch interactionState {
+		case .none, .mayScrub:
+			track.clearHighlight()
+		case .scrubbing:
+			guard let index = sectionMarkerIndex else {
+				// The playhead position is before any section markers.
+				track.highlightSectionBetween(leftTickMark: nil,
+											  rightTickMark: tickMark(forSectionMarker: sectionMarkers[0]))
+				return
+			}
+
+			let leftTickMark = tickMark(forSectionMarker: sectionMarkers[index])
+			
+			let rightTickMark: Track.TickMark? = {
+				if sectionMarkers.count > index + 1 {
+					return tickMark(forSectionMarker: sectionMarkers[index + 1])
+				} else {
+					// There are no section markers after the current one.
+					return nil
+				}
+			}()
+			
+			track.highlightSectionBetween(leftTickMark: leftTickMark, rightTickMark: rightTickMark)
+		}
 	}
 	
 	// MARK: - Touch Handling
@@ -219,6 +267,8 @@ public class PlaybackScrubber: UIControl {
 			feedbackGenerator = createFeedbackGenerator()
 			feedbackGenerator?.prepare()
 		}
+		
+		updateTrackHighlight()
 	}
 	
 	public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -237,22 +287,22 @@ public class PlaybackScrubber: UIControl {
 			}
 		case .scrubbing:
 			let newPlayheadPosition = playheadPosition(forTouchLocation: touchLocation)
+			let preScrubSectionMarkerIndex = sectionMarkerIndex
+			playheadPosition = newPlayheadPosition
 			
-			if sectionMarkerExistsBetween(playheadPosition, newPlayheadPosition) {
+			if preScrubSectionMarkerIndex != sectionMarkerIndex {
 				feedbackGenerator?.impactOccurred(intensity: Self.markerImpactIntensity)
 				feedbackGenerator?.prepare()
 			}
 			
-			playheadPosition = newPlayheadPosition
 			delegate?.scrubber(self, didScrubToTime: playheadPosition)
 		}
+		
+		updateTrackHighlight()
 	}
 	
-	private func sectionMarkerExistsBetween(_ timeA: TimeInterval, _ timeB: TimeInterval) -> Bool {
-		return sectionMarkers.contains(where: { marker in
-			timeA < marker.time && timeB >= marker.time ||
-			timeA > marker.time && timeB <= marker.time
-		})
+	private func indexOfSectionMarkerImmediatelyPreceeding(_ time: TimeInterval) -> Int? {
+		return sectionMarkers.lastIndex(where: { $0.time < time })
 	}
 	
 	public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -266,6 +316,7 @@ public class PlaybackScrubber: UIControl {
 
 		interactionState = .none
 		feedbackGenerator = nil
+		updateTrackHighlight()
 	}
 	
 	private func playheadPosition(forTouchLocation touchLocation: CGPoint) -> TimeInterval {
@@ -285,13 +336,14 @@ public class PlaybackScrubber: UIControl {
 		
 		interactionState = .none
 		feedbackGenerator = nil
+		updateTrackHighlight()
 	}
 }
 
 // MARK: - Section Marker
 
 extension PlaybackScrubber {
-	public struct SectionMarker {
+	public struct SectionMarker: Equatable {
 		var time: TimeInterval
 		var title: String? // Currently unused
 		var description: String? // Currently unused
@@ -301,7 +353,7 @@ extension PlaybackScrubber {
 // MARK: - Track
 
 extension PlaybackScrubber {
-	class Track: UIView {
+	class Track: ShapeView {
 		
 		/// The width of the portion of the track at either end that is not usable due to the width of the playhead.
 		var insetDistance: CGFloat = 0
@@ -317,39 +369,45 @@ extension PlaybackScrubber {
 		var elapsedTintColor: UIColor = .systemGreen {
 			didSet {
 				elapsedLayer.fillColor = elapsedTintColor.cgColor
+				highlightElapsedLayer.fillColor = elapsedTintColor.cgColor
 			}
 		}
 		
 		/// The color of the portion of the track that represents the remaining time. Defaults to a light gray with 50% opacity.
 		var remainingTintColor: UIColor = UIColor(white: 0.7, alpha: 0.5) {
 			didSet {
-				baseLayer.fillColor = remainingTintColor.cgColor
+				shapeLayer.fillColor = remainingTintColor.cgColor
+				highlightView.shapeLayer.fillColor = remainingTintColor.withAlphaComponent(1.0).cgColor
 			}
 		}
-		
-		/// An array of tick marks to be represented on the track visually.
-		var tickMarks: [TickMark] = []
 		
 		/// True if the corners of the track and the elapsed time fill should be rounded, false otherwise.
 		var shouldRoundCorners = true
 		
-		struct TickMark {
+		/// An ordered array of tick marks to be represented on the track visually.
+		var tickMarks: [TickMark] = []
+		
+		struct TickMark: Equatable {
 			enum Style: Equatable {
 				case occlusion
 //				case color(UIColor) // TODO: Handle drawing colored tick marks
 			}
+			
+			/// Location of tick mark on the track as a percentage of the represented duration.
 			var location: Double
 			var style: Style
 		}
 		
 		// MARK: - Private Properties
 
-		private static var tickMarkWidth: CGFloat = 2
+		private static let tickMarkWidth: CGFloat = 2
+		/// The amount that the track should grow vertically in each direction when being highlighted.
+		private static let highlightSize: CGFloat = 2
 		
-		override class var layerClass: AnyClass { CAShapeLayer.self }
-		private var baseLayer: CAShapeLayer { layer as! CAShapeLayer }
+		private let elapsedLayer = CAShapeLayer()
 		
-		private var elapsedLayer = CAShapeLayer()
+		private let highlightView = ShapeView()
+		private let highlightElapsedLayer = CAShapeLayer()
 		
 		private var cornerRadius: CGFloat { shouldRoundCorners ? bounds.height / 2 : 0 }
 		
@@ -358,6 +416,7 @@ extension PlaybackScrubber {
 		override init(frame: CGRect) {
 			super.init(frame: frame)
 			configureLayers()
+			configureHighlightView()
 		}
 		
 		@available(*, unavailable)
@@ -365,22 +424,80 @@ extension PlaybackScrubber {
 			fatalError("Use `init(frame:)`")
 		}
 		
+		func highlightSectionBetween(leftTickMark: TickMark?, rightTickMark: TickMark?) {
+			guard leftTickMark != nil || rightTickMark != nil else {
+				clearHighlight()
+				return
+			}
+			
+			let minX: CGFloat = {
+				if let leftTickMark = leftTickMark {
+					return rectForTickMark(leftTickMark).maxX
+				} else {
+					return 0
+				}
+			}()
+			
+			let maxX: CGFloat = {
+				if let rightTickMark = rightTickMark {
+					return rectForTickMark(rightTickMark).minX
+				} else {
+					return frame.maxX
+				}
+			}()
+			
+			let highlightRect = CGRect(x: minX,
+									   y: 0,
+									   width: maxX - minX,
+									   height: frame.height + Self.highlightSize * 2)
+			
+			highlightView.shapeLayer.path = CGPath(rect: highlightRect, transform: nil)
+		}
+		
+		func clearHighlight() {
+			highlightView.shapeLayer.path = nil
+			highlightElapsedLayer.path = nil
+		}
+		
 		private func configureLayers() {
-			// Setting the fill rule to `.evenOdd` allows us to mask off the occlusion tick marks
-			baseLayer.fillRule = .evenOdd
+			// Setting the fill rule to `.evenOdd` allows us to mask off the occlusion tick marks.
+			shapeLayer.fillRule = .evenOdd
+			shapeLayer.fillColor = remainingTintColor.cgColor
+			
 			elapsedLayer.fillRule = .evenOdd
-			baseLayer.fillColor = remainingTintColor.cgColor
 			elapsedLayer.fillColor = elapsedTintColor.cgColor
-			baseLayer.addSublayer(elapsedLayer)
+			shapeLayer.addSublayer(elapsedLayer)
+		}
+		
+		private func configureHighlightView() {
+			addSubview(highlightView)
+			highlightView.translatesAutoresizingMaskIntoConstraints = false
+			
+			highlightView.clipsToBounds = true
+			highlightView.shapeLayer.fillColor = remainingTintColor.withAlphaComponent(1.0).cgColor
+			
+			highlightElapsedLayer.fillColor = elapsedTintColor.cgColor
+			highlightView.layer.addSublayer(highlightElapsedLayer)
 		}
 		
 		override func layoutSubviews() {
-			setPathForLayer(baseLayer, withRect: bounds)
+			setPathForLayer(shapeLayer, withRect: bounds)
 			let elapsedRect = CGRect(x: 0,
 									 y: 0,
 									 width: insetDistance + usableWidth * CGFloat(progress),
 									 height: frame.height)
 			setPathForLayer(elapsedLayer, withRect: elapsedRect)
+			
+			highlightView.frame = bounds.insetBy(dx: 0, dy: -Self.highlightSize)
+			highlightView.layer.cornerRadius = cornerRadius + Self.highlightSize
+			
+			if let path = highlightView.shapeLayer.path {
+				let elapsedIntersection = elapsedRect
+					.insetBy(dx: 0, dy: -Self.highlightSize) // highlightView is taller
+					.offsetBy(dx: 0, dy: Self.highlightSize) // and it's origin is offset
+					.intersection(path.boundingBox)
+				highlightElapsedLayer.path = CGPath(rect: elapsedIntersection, transform: nil)
+			}
 		}
 		
 		private func setPathForLayer(_ layer: CAShapeLayer, withRect rect: CGRect) {
@@ -390,26 +507,28 @@ extension PlaybackScrubber {
 									 transform: nil)
 			
 			for tickMark in tickMarks where tickMark.style == .occlusion {
-				let tickMarkRect = CGRect(x: insetDistance + (usableWidth - Self.tickMarkWidth) * tickMark.location,
-										  y: 0,
-										  width: Self.tickMarkWidth,
-										  height: bounds.height)
-				let rect = tickMarkRect.intersection(rect)
-				guard rect != .null else { continue }
-				path.addRect(rect)
+				let intersection = rectForTickMark(tickMark).intersection(rect)
+				guard intersection != .null else { continue }
+				path.addRect(intersection)
 			}
 	
 			layer.path = path
 		}
+		
+		private func rectForTickMark(_ tickMark: TickMark) -> CGRect {
+			return CGRect(x: insetDistance + (usableWidth - Self.tickMarkWidth) * tickMark.location,
+						  y: 0,
+						  width: Self.tickMarkWidth,
+						  height: frame.height)
+		}
 	}
-	
 }
 
 // MARK: - Playhead
 
 extension PlaybackScrubber {
 	
-	class Playhead: UIView {
+	class Playhead: ShapeView {
 		
 		// MARK: - Public Properties
 		
@@ -419,11 +538,6 @@ extension PlaybackScrubber {
 				shapeLayer.fillColor = color.cgColor
 			}
 		}
-		
-		// MARK: - Private Properties
-		
-		override class var layerClass: AnyClass { CAShapeLayer.self }
-		private var shapeLayer: CAShapeLayer { layer as! CAShapeLayer }
 		
 		// MARK: - Init
 		
@@ -449,4 +563,10 @@ extension PlaybackScrubber {
 			shapeLayer.shadowOpacity = 0.3
 		}
 	}
+}
+
+/// A `UIView` that uses a `CAShapeLayer` as it's layer.
+class ShapeView: UIView {
+	override class var layerClass: AnyClass { CAShapeLayer.self }
+	var shapeLayer: CAShapeLayer { layer as! CAShapeLayer }
 }
