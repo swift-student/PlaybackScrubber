@@ -96,6 +96,13 @@ public class PlaybackScrubber: UIControl {
 		get { playhead.color }
 	}
 	
+	/// A closure that takes in the bounds for the playhead and returns a path for the playhead.
+	/// This property defaults to a closure that returns an ellipse filling the bounds.
+	public var drawPlayheadPath: (CGRect) -> CGPath {
+		set { playhead.drawPath = newValue }
+		get { playhead.drawPath }
+	}
+	
 	/// When true, the user can initiate a scrub by dragging on the track at any location, not just where the playhead is.
 	/// The touch must move a certain amount before the playhead will snap to the touch's location.
 	/// When false, the user must touch within the playhead's frame (plus some margin) in order to initiate a scrub.
@@ -539,6 +546,12 @@ extension PlaybackScrubber {
 			}
 		}
 		
+		var drawPath: (CGRect) -> CGPath = { CGPath(ellipseIn: $0, transform: nil) } {
+			didSet {
+				setNeedsLayout()
+			}
+		}
+		
 		// MARK: - Init
 		
 		override init(frame: CGRect) {
@@ -553,7 +566,7 @@ extension PlaybackScrubber {
 		}
 		
 		override func layoutSubviews() {
-			shapeLayer.path = CGPath(ellipseIn: bounds, transform: nil)
+			shapeLayer.path = drawPath(bounds)
 		}
 		
 		private func configureShadow() {
